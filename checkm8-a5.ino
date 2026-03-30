@@ -1,7 +1,15 @@
-#include "Usb.h"
+#define LED_PIN 6
 
-#define A5_8942
+#define USB_DEVICE_VENDORID_APPLE 0x5ac
+#define USB_DEVICE_PRODUCTID_APPLE_IPHONE_7 0x1227
+#define USB_DEVICE_PRODUCTID_APPLE_ATV31 0x12a7
+
+//#define A5_8940
+#define A5_8942    //this is for AppleTV3,1 (https://ipsw.me/AppleTV3,1/info/)
+//#define A5_8945  //this is for iPad2,1    (https://ipsw.me/iPad2,1/info)
 #include "constants.h"
+
+#include "Usb.h"
 
 USB Usb;
 USB_DEVICE_DESCRIPTOR desc_buf;
@@ -30,13 +38,17 @@ uint8_t send_out(uint8_t * io_buf, uint8_t pktsize)
   return rcode;
 }
 
+
 void setup() {
+  pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);
+  Serial.println();
   Serial.println("checkm8 started");
   if(Usb.Init() == -1)
     Serial.println("usb init error");
   delay(200);
 }
+
 
 void loop() {
   Usb.Task();
@@ -45,38 +57,65 @@ void loop() {
   {
     //Serial.print("usb state: "); Serial.println(state, HEX);
     last_state = state;
+    if(state == USB_STATE_DETACHED)                    Serial.println("usb state: DETACHED");
+    if(state == USB_DETACHED_SUBSTATE_INITIALIZE)      Serial.println("usb state: DETACHED - INITIALIZE");
+    if(state == USB_DETACHED_SUBSTATE_WAIT_FOR_DEVICE) Serial.println("usb state: DETACHED - WAIT_FOR_DEVICE");
+    if(state == USB_DETACHED_SUBSTATE_ILLEGAL)         Serial.println("usb state: DETACHED - ILLEGAL");
+
+    if(state == USB_ATTACHED_SUBSTATE_SETTLE)                     Serial.println("usb state: ATTACHED - SETTLE");
+    if(state == USB_ATTACHED_SUBSTATE_RESET_DEVICE)               Serial.println("usb state: ATTACHED - RESET_DEVICE");
+    if(state == USB_ATTACHED_SUBSTATE_WAIT_RESET_COMPLETE)        Serial.println("usb state: ATTACHED - WAIT_RESET_COMPLETE");
+    if(state == USB_ATTACHED_SUBSTATE_WAIT_SOF)                   Serial.println("usb state: ATTACHED - WAIT_SOF");
+    if(state == USB_ATTACHED_SUBSTATE_WAIT_RESET)                 Serial.println("usb state: ATTACHED - WAIT_RESET");
+    if(state == USB_ATTACHED_SUBSTATE_GET_DEVICE_DESCRIPTOR_SIZE) Serial.println("usb state: ATTACHED - GET_DEVICE_DESCRIPTOR_SIZE");
+
+    if(state == USB_STATE_ADDRESSING)  Serial.println("usb state: ADDRESSING");
+    if(state == USB_STATE_CONFIGURING) Serial.println("usb state: CONFIGURING");
+    if(state == USB_STATE_RUNNING)     Serial.println("usb state: RUNNING");
+    if(state == USB_STATE_ERROR)       Serial.println("usb state: ERROR");
   }
   if(state == USB_STATE_ERROR)
   {
     Usb.setUsbTaskState(USB_ATTACHED_SUBSTATE_RESET_DEVICE);
   }
+
   if(state == USB_STATE_RUNNING)
   {
     if(!is_apple_dfu)
     {
+      Serial.println("CONNECTED - validating connected USB Device");
       Usb.getDevDescr(0, 0, 0x12, (uint8_t *) &desc_buf);
-      if(desc_buf.idVendor != 0x5ac || desc_buf.idProduct != 0x1227) 
+      Serial.print("USB-Device Vendor       : "); Serial.println(desc_buf.idVendor, HEX);
+      Serial.print("USB-Device Product      : "); Serial.println(desc_buf.idProduct, HEX);
+      Serial.print("USB-Device SerialNumber : "); Serial.println(desc_buf.iSerialNumber);
+
+      if( (desc_buf.idVendor == USB_DEVICE_VENDORID_APPLE && desc_buf.idProduct == USB_DEVICE_PRODUCTID_APPLE_IPHONE_7)
+        ||(desc_buf.idVendor == USB_DEVICE_VENDORID_APPLE && desc_buf.idProduct == USB_DEVICE_PRODUCTID_APPLE_ATV31) )
+      {
+        is_apple_dfu = true;
+        serial_idx = desc_buf.iSerialNumber; 
+      }
+      else
       {
         Usb.setUsbTaskState(USB_ATTACHED_SUBSTATE_RESET_DEVICE);
         if(checkm8_state != CHECKM8_END)
         {
-            Serial.print("Non Apple DFU found (vendorId: "); Serial.print(desc_buf.idVendor); Serial.print(", productId: "); Serial.print(desc_buf.idProduct); Serial.println(")");
+            Serial.print("Non Apple DFU found (vendorId: "); Serial.print(desc_buf.idVendor,HEX); Serial.print(", productId: "); Serial.print(desc_buf.idProduct,HEX); Serial.println(")");
             delay(5000);
         }
         return;
       }
-      is_apple_dfu = true;
-      serial_idx = desc_buf.iSerialNumber;
     }
 
     switch(checkm8_state)
     {
       case CHECKM8_INIT_RESET:
+        Serial.println("Starting.....");
         for(int i = 0; i < 3; i++)
         {
-          digitalWrite(6, HIGH);
+          digitalWrite(LED_PIN, HIGH);
           delay(500);
-          digitalWrite(6, LOW);
+          digitalWrite(LED_PIN, LOW);
           delay(500);
         }
         checkm8_state = CHECKM8_HEAP_FENG_SHUI;
@@ -99,7 +138,7 @@ void loop() {
         Usb.setUsbTaskState(USB_ATTACHED_SUBSTATE_RESET_DEVICE);
         break;
       case CHECKM8_END:
-        digitalWrite(6, HIGH);
+        digitalWrite(LED_PIN, HIGH);
         Serial.println("Done!"); 
         checkm8_state = -1;
         break;
