@@ -5,7 +5,7 @@
 This repository contains the [checkm8](https://github.com/axi0mX/ipwndfu/blob/master/checkm8.py) port for Arduino and USB Host Shield.
 The sketch works only for `iPhone 7`; for other platforms, it is necessary to replace `payload` and `overwrite` in `constants.h`.
 
-![](./photo.jpg)
+![](photo.jpg)
 
 ## Building
 
